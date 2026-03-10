@@ -76,7 +76,7 @@ python -c "import torch; import cv2; import mediapipe; print('all good')"
 
 ### Step 1. 데이터 수집
 
-웹캠으로 각 동작당 100시퀀스(30프레임씩)를 수집합니다.
+웹캠으로 각 동작당 50시퀀스(60프레임씩)를 수집합니다.
 
 ```bash
 python src/collect_data.py
@@ -109,7 +109,7 @@ python src/predict.py
 ## 🧬 모델 구조
 
 ```
-입력: (30프레임, 126개 특징값)  ← 양손 21개 관절 × xyz × 2
+입력: (60프레임, 126개 특징값)  ← 양손 21개 관절 × xyz × 2
         ↓
 LSTM (hidden=128, layers=2, dropout=0.3)
         ↓
