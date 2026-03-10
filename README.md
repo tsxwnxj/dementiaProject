@@ -6,7 +6,7 @@ pip install torch torchvision opencv-python "mediapipe==0.10.13" \
 
 # 폴더 구조
 dementiaGestureRecognition/
-├── data/
+├── data/ \n
 │   └── sequences/          # 동작별 시퀀스 데이터 (.npy)
 │       ├── finger_wave/     # 1. 손가락 움직이기
 │       ├── hand_shake/      # 2. 손털기
