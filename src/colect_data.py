@@ -13,7 +13,7 @@ GESTURES = [
     "fingertip_clap",  # 6. 손끝 박수
     "side_clap",       # 7. 손사이 박수
 ]
-SEQUENCE_LEN  = 30   # 동작 1회 = 30프레임
+SEQUENCE_LEN  = 60   # 동작 1회 = 60프레임 (~2초)
 NUM_SEQUENCES = 100  # 동작당 100시퀀스
 DATA_PATH     = "data/sequences"
 
@@ -127,7 +127,7 @@ def collect():
 
             # 시퀀스 저장
             save_path = os.path.join(DATA_PATH, gesture, f"{seq_idx}.npy")
-            np.save(save_path, np.array(sequence))  # shape: (30, 126)
+            np.save(save_path, np.array(sequence))  # shape: (60, 126)
 
             if (seq_idx + 1) % 10 == 0:
                 print(f"  {gesture}: {seq_idx+1}/{NUM_SEQUENCES} saved")
