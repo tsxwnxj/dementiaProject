@@ -1,0 +1,5 @@
+dementiaGesture/
+data/
+*.pt
+__pycache__/
+*.md
