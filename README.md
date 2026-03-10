@@ -77,6 +77,8 @@ python -c "import torch; import cv2; import mediapipe; print('all good')"
 ### Step 1. 데이터 수집
 
 웹캠으로 각 동작당 50시퀀스(60프레임씩)를 수집합니다.
+팀원 3명 * 50시퀀스 = 동작당 총 150시퀀스
+7동작 총 1050시퀀스
 
 ```bash
 python src/collect_data.py
