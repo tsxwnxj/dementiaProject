@@ -14,7 +14,7 @@ GESTURES = [
     "side_clap",       # 7. 손사이 박수
 ]
 SEQUENCE_LEN  = 60   # 동작 1회 = 60프레임 (~2초)
-NUM_SEQUENCES = 50  # 동작당 100시퀀스
+NUM_SEQUENCES = 50  # 동작당 50시퀀스
 DATA_PATH     = "data/sequences"
 
 # ── MediaPipe 초기화 ───────────────────────────────────────
