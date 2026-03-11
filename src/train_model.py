@@ -14,9 +14,8 @@ GESTURES = [
     "fist_open",       # 4. 주먹 쥐고 펴기
     "cross_fist",      # 5. 엇갈려 주먹 쥐고 펴기
     "fingertip_clap",  # 6. 손끝 박수
-    "side_clap",       # 7. 손사이 박수
 ]
-SEQUENCE_LEN = 60    # collect_data.py 와 반드시 일치
+SEQUENCE_LEN = 30    # collect_data.py 와 반드시 일치
 INPUT_SIZE   = 126   # 양손 21개 관절 × xyz × 2
 HIDDEN_SIZE  = 128
 NUM_LAYERS   = 2

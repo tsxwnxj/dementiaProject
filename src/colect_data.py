@@ -11,9 +11,8 @@ GESTURES = [
     "fist_open",       # 4. 주먹 쥐고 펴기
     "cross_fist",      # 5. 엇갈려 주먹 쥐고 펴기
     "fingertip_clap",  # 6. 손끝 박수
-    "side_clap",       # 7. 손사이 박수
 ]
-SEQUENCE_LEN  = 60   # 동작 1회 = 60프레임 (~2초)
+SEQUENCE_LEN  = 30   # 동작 1회 = 60프레임 (~2초)
 NUM_SEQUENCES = 50  # 동작당 50시퀀스
 DATA_PATH     = "data/sequences"
 
