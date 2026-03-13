@@ -14,7 +14,7 @@ HIDDEN_SIZE  = 128
 NUM_LAYERS   = 2
 MODEL_PATH   = "model/gesture_lstm.pt"
 LABEL_PATH   = "model/label_encoder.pkl"
-CONFIDENCE_THRESHOLD = 0.5  # 이 이하면 인식 안된 것으로 처리
+CONFIDENCE_THRESHOLD = 0.7  # 이 이하면 인식 안된 것으로 처리
 
 GESTURE_KO = {
     "finger_wave":    "1. Finger Wave",
