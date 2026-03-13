@@ -15,7 +15,7 @@ ALL_GESTURES = {
 }
 SEQUENCE_LEN  = 30   # 동작 1회 = 30프레임 (~1초)
 NUM_SEQUENCES = 50   # 동작당 추가 수집할 시퀀스 수
-DATA_PATH     = "data/sequences"
+DATA_PATH     = "C:\Users\jaemi\dementiaProject3\data\sequences"
 
 # ── MediaPipe 초기화 ───────────────────────────────────────
 mp_hands = mp.solutions.hands
