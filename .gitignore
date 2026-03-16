@@ -3,3 +3,4 @@ dementiaGesture/
 *.pt
 __pycache__/
 *.md
+.claude/
