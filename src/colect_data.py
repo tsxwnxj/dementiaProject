@@ -14,7 +14,7 @@ ALL_GESTURES = {
     "6": "fingertip_clap",  # 6. 손끝 박수
 }
 SEQUENCE_LEN  = 30   # 동작 1회 = 30프레임 (~1초)
-NUM_SEQUENCES = 50   # 동작당 추가 수집할 시퀀스 수
+NUM_SEQUENCES = 100   # 동작당 추가 수집할 시퀀스 수
 DATA_PATH     = "/Users/jangjunseo/Desktop/dementiaProject/data/sequences"
 
 # ── MediaPipe 초기화 ───────────────────────────────────────

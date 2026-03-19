@@ -10,24 +10,24 @@ from collections import deque, Counter
 # ── 설정 ──────────────────────────────────────────────────
 SEQUENCE_LEN         = 30
 INPUT_SIZE           = 126
-HIDDEN_SIZE          = 128
+HIDDEN_SIZE          = 64
 NUM_LAYERS           = 2
 NUM_CLASSES          = 6
-CONFIDENCE_THRESHOLD = 0.75   # 높일수록 확실할 때만 표시
-HAND_DETECT_RATIO    = 0.7    # 버퍼 중 손 감지 비율 기준
-SMOOTH_WINDOW        = 5      # 예측 스무딩 윈도우 크기
+CONFIDENCE_THRESHOLD = 0.75
+HAND_DETECT_RATIO    = 0.5
+SMOOTH_WINDOW        = 5
 
-MODEL_DIR     = "/Users/jangjunseo/Desktop/dementiaProject/model"
-LABEL_PATH    = f"{MODEL_DIR}/label_encoder.pkl"
-ENSEMBLE_PATH = f"{MODEL_DIR}/ensemble_info.pkl"
+MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"
+MODEL_PATH = f"{MODEL_DIR}/gesture_lstm.pt"
+LABEL_PATH = f"{MODEL_DIR}/label_encoder.pkl"
 
-GESTURE_EN = {
-    "finger_wave":    "1. Finger Wave",
-    "hand_shake":     "2. Hand Shake",
-    "finger_fold":    "3. Finger Fold",
-    "fist_open":      "4. Fist Open",
-    "cross_fist":     "5. Cross Fist",
-    "fingertip_clap": "6. Fingertip Clap",
+GESTURE_KO = {
+    "finger_wave":    "finger_wave",
+    "hand_shake":     "hand_ shake",
+    "finger_fold":    "finger_fold",
+    "fist_open":      "fist_open",
+    "cross_fist":     "cross_fist",
+    "fingertip_clap": "fingertip_clap",
 }
 
 # ── MediaPipe 초기화 ───────────────────────────────────────
@@ -64,19 +64,6 @@ class GestureLSTM(nn.Module):
         return self.fc(out[:, -1])
 
 
-def load_ensemble(device):
-    with open(ENSEMBLE_PATH, "rb") as f:
-        info = pickle.load(f)
-    models = []
-    for path in info["model_paths"]:
-        m = GestureLSTM().to(device)
-        m.load_state_dict(torch.load(path, map_location=device))
-        m.eval()
-        models.append(m)
-    print(f"[Loaded] 앙상블 모델 {len(models)}개")
-    return models
-
-
 def extract_landmarks(frame):
     rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     result = hands.process(rgb)
@@ -94,43 +81,29 @@ def extract_landmarks(frame):
     return data
 
 
-def draw_score_bar(frame, score, x=20, y=130, width=300):
-    bar_w = int(score / 100 * width)
-    if score >= 80:
-        color = (0, 255, 0)
-    elif score >= 60:
-        color = (0, 165, 255)
-    else:
-        color = (0, 0, 255)
-    cv2.rectangle(frame, (x, y), (x + bar_w, y + 20), color, -1)
-    cv2.rectangle(frame, (x, y), (x + width, y + 20), (200, 200, 200), 2)
-    cv2.putText(frame, f"{score}%", (x + width + 10, y + 15),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-    return color
-
-
 def predict():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
     with open(LABEL_PATH, "rb") as f:
         le = pickle.load(f)
 
-    models = load_ensemble(device)
+    model = GestureLSTM().to(device)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    model.eval()
+    print(f"[Loaded] 모델 → {MODEL_PATH}")
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("❌ Cannot open webcam.")
         return
 
-    buffer        = deque(maxlen=SEQUENCE_LEN)   # 랜드마크 버퍼
-    pred_history  = deque(maxlen=SMOOTH_WINDOW)  # 예측 스무딩용
-
+    buffer       = deque(maxlen=SEQUENCE_LEN)
+    pred_history = deque(maxlen=SMOOTH_WINDOW)
     gesture_name = ""
-    score        = 0
+    hand_ratio   = 0.0
 
     print("=" * 50)
-    print("  Dementia Prevention - Gesture Recognition")
-    print(f"  Ensemble ({len(models)} models) | Confidence >= {CONFIDENCE_THRESHOLD:.0%}")
+    print("  치매 예방 손가락 운동 인식")
     print("  Press 'q' to quit")
     print("=" * 50)
 
@@ -139,76 +112,65 @@ def predict():
         if not ret:
             break
         frame = cv2.flip(frame, 1)
+        h, w  = frame.shape[:2]
 
         landmarks = extract_landmarks(frame)
         buffer.append(landmarks)
 
         if len(buffer) == SEQUENCE_LEN:
-
-            # ── 1. 손 감지 비율 확인 ──────────────────────
             hand_detected = sum(1 for f in buffer if np.any(f != 0))
             hand_ratio    = hand_detected / SEQUENCE_LEN
 
             if hand_ratio < HAND_DETECT_RATIO:
-                # 손이 충분히 감지 안 됨 → 초기화
-                gesture_name = "..."
-                score        = 0
+                gesture_name = ""
                 pred_history.clear()
-
             else:
-                # ── 2. 앙상블 예측 ────────────────────────
                 seq = torch.tensor(
                     np.array(buffer), dtype=torch.float32
                 ).unsqueeze(0).to(device)
 
                 with torch.no_grad():
-                    probs = torch.zeros(1, NUM_CLASSES).to(device)
-                    for m in models:
-                        probs += F.softmax(m(seq), dim=1)
-                    probs /= len(models)
-
+                    probs     = F.softmax(model(seq), dim=1)
                     conf, idx = probs.max(dim=1)
                     conf_val  = conf.item()
 
                 if conf_val >= CONFIDENCE_THRESHOLD:
                     pred_history.append(idx.item())
-
-                    # ── 3. 스무딩: 최근 N개 중 최빈값 ──────
-                    most_common_idx = Counter(pred_history).most_common(1)[0][0]
-                    gesture_key     = le.inverse_transform([most_common_idx])[0]
-                    gesture_name    = GESTURE_EN.get(gesture_key, gesture_key)
-                    score           = int(conf_val * 100)
+                    most_common = Counter(pred_history).most_common(1)[0][0]
+                    gesture_key = le.inverse_transform([most_common])[0]
+                    gesture_name = GESTURE_KO.get(gesture_key, gesture_key)
                 else:
-                    gesture_name = "..."
-                    score        = 0
+                    gesture_name = ""
 
         # ── UI 렌더링 ──────────────────────────────────────
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (10, 10), (420, 175), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.4, frame, 0.6, 0, frame)
+        if gesture_name:
+            # 동작 이름 배경 박스
+            font       = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1.2
+            thickness  = 2
+            (text_w, text_h), _ = cv2.getTextSize(gesture_name, font, font_scale, thickness)
 
-        cv2.putText(frame, gesture_name, (20, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2)
+            box_x1 = 20
+            box_y1 = h - 80
+            box_x2 = box_x1 + text_w + 30
+            box_y2 = h - 20
 
-        if score > 0:
-            color = draw_score_bar(frame, score)
-            if score >= 80:
-                msg = "Great!"
-            elif score >= 60:
-                msg = "Keep going!"
-            else:
-                msg = "Try again!"
-            cv2.putText(frame, msg, (20, 108),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            # 반투명 배경
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (box_x1, box_y1), (box_x2, box_y2), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
 
-        # 손 감지 비율 표시 (디버깅용)
-        if len(buffer) == SEQUENCE_LEN:
-            ratio_text = f"Hand: {hand_ratio:.0%}"
-            ratio_color = (0, 255, 0) if hand_ratio >= HAND_DETECT_RATIO else (0, 0, 255)
-            cv2.putText(frame, ratio_text, (20, 165),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, ratio_color, 1)
+            # 동작 이름 텍스트
+            cv2.putText(frame, gesture_name,
+                        (box_x1 + 15, box_y2 - 15),
+                        font, font_scale, (0, 255, 0), thickness)
 
-        cv2.imshow("Dementia Prevention - Gesture Recognition", frame)
+        # 손 감지 비율 (디버깅용)
+        ratio_color = (0, 255, 0) if hand_ratio >= HAND_DETECT_RATIO else (0, 0, 255)
+        cv2.putText(frame, f"Hand: {hand_ratio:.0%}",
+                    (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, ratio_color, 1)
+
+        cv2.imshow("치매 예방 손가락 운동 인식", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
