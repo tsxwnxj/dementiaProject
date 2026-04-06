@@ -9,25 +9,27 @@ from collections import deque, Counter
 
 # ── 설정 ──────────────────────────────────────────────────
 SEQUENCE_LEN         = 30
-INPUT_SIZE           = 126
+NUM_KEYPOINTS        = 42
+USE_VELOCITY         = True
+INPUT_SIZE           = NUM_KEYPOINTS * 3 * (2 if USE_VELOCITY else 1)  # 252
 HIDDEN_SIZE          = 64
 NUM_LAYERS           = 2
 NUM_CLASSES          = 6
-CONFIDENCE_THRESHOLD = 0.75
+CONFIDENCE_THRESHOLD = 0.7
 HAND_DETECT_RATIO    = 0.7
-SMOOTH_WINDOW        = 5
+SMOOTH_WINDOW        = 4
 
 MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"
 MODEL_PATH = f"{MODEL_DIR}/gesture_cnn_lstm.pt"
 LABEL_PATH = f"{MODEL_DIR}/label_encoder.pkl"
 
 GESTURE_KO = {
-    "finger_wave":    "finger_wave",
-    "hand_shake":     "hand_shake",
-    "finger_fold":    "finger_fold",
-    "fist_open":      "fist_open",
-    "cross_fist":     "cross_fist",
-    "fingertip_clap": "fingertip_clap",
+    "finger_wave":    "finger wave",
+    "hand_shake":     "hand shake",
+    "finger_fold":    "finger fold",
+    "fist_open":      "fist open",
+    "cross_fist":     "cross fist",
+    "fingertip_clap": "fingertip clap",
 }
 
 # ── MediaPipe 초기화 ───────────────────────────────────────
@@ -71,13 +73,31 @@ class GestureCNNLSTM(nn.Module):
         x = self.cnn(x)
         x = x.permute(0, 2, 1)
         out, _ = self.lstm(x)
-        return self.fc(out[:, -1])
+        out = out.mean(dim=1)  # mean pooling
+        return self.fc(out)
+
+
+# ── 전처리 ────────────────────────────────────────────────
+def normalize_sequence(seq):
+    """bounding box 기반 정규화"""
+    seq = seq.reshape(SEQUENCE_LEN, -1, 3)
+    min_xy = seq[:, :, :2].min(axis=1, keepdims=True)
+    max_xy = seq[:, :, :2].max(axis=1, keepdims=True)
+    seq[:, :, :2] = (seq[:, :, :2] - min_xy) / (max_xy - min_xy + 1e-6)
+    return seq.reshape(SEQUENCE_LEN, -1)
+
+
+def add_velocity(seq):
+    """velocity feature 추가"""
+    vel = np.diff(seq, axis=0)
+    vel = np.vstack([vel, vel[-1]])
+    return np.concatenate([seq, vel], axis=1)
 
 
 def extract_landmarks(frame):
     rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     result = hands.process(rgb)
-    data   = np.zeros(126, dtype=np.float32)
+    data   = np.zeros(NUM_KEYPOINTS * 3, dtype=np.float32)
 
     if result.multi_hand_landmarks:
         for i, hand_lm in enumerate(result.multi_hand_landmarks[:2]):
@@ -135,12 +155,16 @@ def predict():
                 gesture_name = ""
                 pred_history.clear()
             else:
-                seq = torch.tensor(
-                    np.array(buffer), dtype=torch.float32
-                ).unsqueeze(0).to(device)
+                # 전처리: 정규화 + velocity (학습과 동일하게)
+                seq = np.array(buffer, dtype=np.float32)
+                seq = normalize_sequence(seq)
+                if USE_VELOCITY:
+                    seq = add_velocity(seq)
+
+                seq_tensor = torch.tensor(seq, dtype=torch.float32).unsqueeze(0).to(device)
 
                 with torch.no_grad():
-                    probs     = F.softmax(model(seq), dim=1)
+                    probs     = F.softmax(model(seq_tensor), dim=1)
                     conf, idx = probs.max(dim=1)
                     conf_val  = conf.item()
 
