@@ -6,16 +6,26 @@ import argparse
 
 # ── 설정 ──────────────────────────────────────────────────
 ALL_GESTURES = {
+<<<<<<< HEAD
     "1": "finger_wave",     # 1. 손가락 움직이기
     "2": "hand_shake",      # 2. 손털기
     "3": "finger_fold",     # 3. 손가락 접기
     "4": "fist_open",       # 4. 주먹 쥐고 펴기 
     "5": "cross_fist",      # 5. 엇갈려 주먹 쥐고 펴기
     "6": "fingertip_clap",  # 6. 손끝 박수
+=======
+    "1": "finger_wave",
+    "2": "hand_shake",
+    "3": "finger_fold",
+    "4": "fist_open",
+    "5": "cross_fist",
+    "6": "fingertip_clap",
+>>>>>>> a579d7d05bc2a1331ecb9486e6734c9a25360456
 }
-SEQUENCE_LEN  = 30   # 동작 1회 = 30프레임 (~1초)
-NUM_SEQUENCES = 50   # 동작당 추가 수집할 시퀀스 수
-DATA_PATH     = r"C:\Users\jaemi\dementiaProject3\data\sequences"
+SEQUENCE_LEN  = 30
+NUM_SEQUENCES = 50
+DATA_PATH     = "/Users/jangjunseo/Desktop/dementiaProject/data/sequences"
+CAMERA_INDEX  = 0  # 아이폰 연속성 카메라
 
 # ── MediaPipe 초기화 ───────────────────────────────────────
 mp_hands = mp.solutions.hands
@@ -65,7 +75,6 @@ def get_start_idx(gesture):
 
 
 def select_gestures():
-    """대화형으로 수집할 동작 선택"""
     print("\n" + "=" * 50)
     print("  Select gestures to collect:")
     print("=" * 50)
@@ -93,10 +102,16 @@ def select_gestures():
 
 
 def collect(gestures):
-    cap = cv2.VideoCapture(0)
+    print(f"\n[Camera] 아이폰 카메라 (index: {CAMERA_INDEX}) 사용")
+    cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
-        print("❌ Cannot open webcam.")
+        print(f"❌ 아이폰 카메라를 열 수 없습니다.")
+        print("   아이폰이 연속성 카메라로 연결됐는지 확인하세요.")
         return
+
+    w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    print(f"[Camera] 원본 해상도: {int(w)}x{int(h)} → 회전 후: {int(h)}x{int(w)}")
 
     print("\n" + "=" * 50)
     print("  Dementia Prevention - Gesture Data Collection")
@@ -108,12 +123,12 @@ def collect(gestures):
         start_idx = get_start_idx(gesture)
         print(f"\n> [{g_idx+1}/{len(gestures)}] {gesture} - existing: {start_idx}, new: {NUM_SEQUENCES}")
 
-        # ── 동작 시작 전 대기 화면 ──
         for countdown in range(90, 0, -1):
             ret, frame = cap.read()
             if not ret:
                 break
             frame = cv2.flip(frame, 1)
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)  # 세로 화면
             extract_landmarks(frame)
 
             secs = countdown // 30 + 1
@@ -129,7 +144,6 @@ def collect(gestures):
                 cv2.destroyAllWindows()
                 return
 
-        # ── 시퀀스 수집 ──
         for seq_idx in range(NUM_SEQUENCES):
             sequence = []
             save_idx = start_idx + seq_idx
@@ -139,6 +153,7 @@ def collect(gestures):
                 if not ret:
                     break
                 frame = cv2.flip(frame, 1)
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)  # 세로 화면
                 landmarks = extract_landmarks(frame)
                 sequence.append(landmarks)
 
@@ -175,8 +190,6 @@ def collect(gestures):
 
 
 if __name__ == "__main__":
-    # 커맨드라인 인자로도 선택 가능
-    # 예: python collect_data.py --gestures 1 4 5
     parser = argparse.ArgumentParser()
     parser.add_argument("--gestures", nargs="*", help="Gesture numbers (e.g. 1 4 5)")
     args = parser.parse_args()

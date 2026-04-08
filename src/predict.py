@@ -18,7 +18,7 @@ HAND_DETECT_RATIO    = 0.5
 SMOOTH_WINDOW        = 5
 
 MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"
-MODEL_PATH = f"{MODEL_DIR}/gesture_lstm.pt"
+MODEL_PATH = f"{MODEL_DIR}/gesture_bi_lstm.pt"
 LABEL_PATH = f"{MODEL_DIR}/label_encoder.pkl"
 
 GESTURE_KO = {

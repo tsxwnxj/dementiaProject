@@ -37,8 +37,8 @@ EPOCHS       = 50
 LR           = 1e-3
 EARLY_STOP   = 15
 
-TRAIN_RANGE = (0, 399)
-VAL_RANGE   = (400, 499)
+TRAIN_RANGE = (0, 699)
+VAL_RANGE   = (700, 799)
 
 DATA_PATH  = "/Users/jangjunseo/Desktop/dementiaProject/data/sequences"
 MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"

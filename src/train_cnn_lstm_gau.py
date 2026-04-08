@@ -27,8 +27,13 @@ GESTURES = [
     "cross_fist",
     "fingertip_clap",
 ]
-SEQUENCE_LEN = 30
-INPUT_SIZE   = 126
+SEQUENCE_LEN  = 30
+NUM_KEYPOINTS = 42        # 양손 21개 × 2
+INPUT_SIZE    = NUM_KEYPOINTS * 3  # 126 (x,y,z)
+USE_VELOCITY  = True
+if USE_VELOCITY:
+    INPUT_SIZE *= 2       # 126 → 252 (position + velocity)
+
 HIDDEN_SIZE  = 64
 NUM_LAYERS   = 2
 NUM_CLASSES  = len(GESTURES)
@@ -37,37 +42,46 @@ EPOCHS       = 50
 LR           = 1e-3
 EARLY_STOP   = 15
 
-TRAIN_RANGE = (0, 399)
-VAL_RANGE   = (400, 499)
+TRAIN_RANGE = (0, 699)   # 7명 학습
+VAL_RANGE   = (700, 799) # 8번째 사람 검증
 
 DATA_PATH  = "/Users/jangjunseo/Desktop/dementiaProject/data/sequences"
 MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"
-MODEL_PATH = os.path.join(MODEL_DIR, "gesture_cnn_lstm_gau.pt")
+MODEL_PATH = os.path.join(MODEL_DIR, "gesture_cnn_lstm.pt")
 LABEL_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
+# ── 전처리 ────────────────────────────────────────────────
+def normalize_sequence(seq):
+    """bounding box 기반 정규화 → 카메라 거리/위치 무관"""
+    seq = seq.reshape(SEQUENCE_LEN, -1, 3)
+    min_xy = seq[:, :, :2].min(axis=1, keepdims=True)
+    max_xy = seq[:, :, :2].max(axis=1, keepdims=True)
+    seq[:, :, :2] = (seq[:, :, :2] - min_xy) / (max_xy - min_xy + 1e-6)
+    return seq.reshape(SEQUENCE_LEN, -1)
+
+
+def add_velocity(seq):
+    """velocity feature 추가 → 동작 방향/속도 정보"""
+    vel = np.diff(seq, axis=0)
+    vel = np.vstack([vel, vel[-1]])
+    return np.concatenate([seq, vel], axis=1)
+
 
 # ── 데이터 증강 ───────────────────────────────────────────
-def add_gaussian_noise(seq, std=0.005):
-    noise = np.random.normal(0, std, seq.shape).astype(np.float32)
-    return seq + noise
-
-
-def augment_dataset(X, y):
-    """원본 + 가우시안 노이즈 (×2)"""
-    aug_X = list(X)
-    aug_y = list(y)
-    for seq, label in zip(X, y):
-        aug_X.append(add_gaussian_noise(seq, std=0.005))
-        aug_y.append(label)
-    return np.array(aug_X, dtype=np.float32), np.array(aug_y)
+def augment_sequence(seq):
+    """가우시안 노이즈 + 스케일링"""
+    seq += np.random.normal(0, 0.01, seq.shape)
+    scale = np.random.uniform(0.8, 1.2)
+    seq *= scale
+    return seq
 
 
 # ── Dataset ───────────────────────────────────────────────
 class GestureDataset(Dataset):
-    def __init__(self, data_path, gestures, file_range):
+    def __init__(self, data_path, gestures, file_range, augment=False):
         self.X, self.y = [], []
         labels = []
         start, end = file_range
@@ -82,10 +96,22 @@ class GestureDataset(Dataset):
                 if not os.path.exists(fpath):
                     continue
                 seq = np.load(fpath)
-                if seq.shape != (SEQUENCE_LEN, INPUT_SIZE):
+                if seq.shape != (SEQUENCE_LEN, NUM_KEYPOINTS * 3):
+                    print(f"[WARN] shape 불일치 {seq.shape} → 스킵: {fpath}")
                     continue
-                self.X.append(seq)
+
+                seq = normalize_sequence(seq)
+                if USE_VELOCITY:
+                    seq = add_velocity(seq)
+
+                # 원본 추가
+                self.X.append(seq.copy())
                 labels.append(g)
+
+                # 증강 추가 (원본과 별도로)
+                if augment:
+                    self.X.append(augment_sequence(seq.copy()))
+                    labels.append(g)
 
         self.le = LabelEncoder()
         self.le.fit(gestures)
@@ -103,18 +129,13 @@ class GestureDataset(Dataset):
 class GestureCNNLSTM(nn.Module):
     def __init__(self):
         super().__init__()
-
-        # CNN: 각 프레임에서 공간적 특징 추출
-        # 입력: (B, 1, 30, 126) → 채널 1개의 2D 맵으로 처리
         self.cnn = nn.Sequential(
-            nn.Conv1d(INPUT_SIZE, 64, kernel_size=3, padding=1),  # (B, 64, 30)
+            nn.Conv1d(INPUT_SIZE, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv1d(64, 128, kernel_size=3, padding=1),          # (B, 128, 30)
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Dropout(0.3),
         )
-
-        # LSTM: CNN 출력의 시간 흐름 학습
         self.lstm = nn.LSTM(
             input_size=128,
             hidden_size=HIDDEN_SIZE,
@@ -122,8 +143,6 @@ class GestureCNNLSTM(nn.Module):
             batch_first=True,
             dropout=0.3,
         )
-
-        # FC: 최종 분류
         self.fc = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, 64),
             nn.ReLU(),
@@ -132,12 +151,12 @@ class GestureCNNLSTM(nn.Module):
         )
 
     def forward(self, x):
-        # x: (B, 30, 126)
-        x = x.permute(0, 2, 1)        # (B, 126, 30) → CNN 입력 형태
-        x = self.cnn(x)                # (B, 128, 30)
-        x = x.permute(0, 2, 1)        # (B, 30, 128) → LSTM 입력 형태
-        out, _ = self.lstm(x)          # (B, 30, 64)
-        return self.fc(out[:, -1])     # 마지막 타임스텝
+        x = x.permute(0, 2, 1)
+        x = self.cnn(x)
+        x = x.permute(0, 2, 1)
+        out, _ = self.lstm(x)
+        out = out.mean(dim=1)  # mean pooling
+        return self.fc(out)
 
 
 # ── 학습 ──────────────────────────────────────────────────
@@ -149,12 +168,13 @@ def train():
     else:
         device = torch.device("cpu")
     print(f"[Device] {device} 사용")
-    print(f"[Model] CNN-LSTM\n")
+    print(f"[Model] CNN-LSTM (정규화 + Velocity + Mean Pooling)\n")
 
-    train_dataset = GestureDataset(DATA_PATH, GESTURES, TRAIN_RANGE)
-    val_dataset   = GestureDataset(DATA_PATH, GESTURES, VAL_RANGE)
+    # 1. 데이터 로드
+    train_dataset = GestureDataset(DATA_PATH, GESTURES, TRAIN_RANGE, augment=True)
+    val_dataset   = GestureDataset(DATA_PATH, GESTURES, VAL_RANGE,   augment=False)
 
-    print(f"[Train] 원본 {len(train_dataset.X)}개 (파일 {TRAIN_RANGE[0]}~{TRAIN_RANGE[1]})")
+    print(f"[Train] {len(train_dataset.X)}개 (파일 {TRAIN_RANGE[0]}~{TRAIN_RANGE[1]})")
     print(f"[Val]   {len(val_dataset.X)}개   (파일 {VAL_RANGE[0]}~{VAL_RANGE[1]}) ← 원본 그대로\n")
 
     if len(train_dataset.X) == 0 or len(val_dataset.X) == 0:
@@ -163,15 +183,12 @@ def train():
 
     with open(LABEL_PATH, "wb") as f:
         pickle.dump(train_dataset.le, f)
-
-    # train에만 증강 적용
-    X_aug, y_aug = augment_dataset(train_dataset.X, train_dataset.y)
-    print(f"[Augment] 원본 {len(train_dataset.X)}개 → 증강 후 {len(X_aug)}개 (×2)\n")
+    print(f"[Saved] 레이블 인코더 → {LABEL_PATH}")
 
     train_loader = DataLoader(
         TensorDataset(
-            torch.tensor(X_aug, dtype=torch.float32),
-            torch.tensor(y_aug, dtype=torch.long)
+            torch.tensor(train_dataset.X, dtype=torch.float32),
+            torch.tensor(train_dataset.y, dtype=torch.long)
         ), batch_size=BATCH_SIZE, shuffle=True
     )
     val_loader = DataLoader(
@@ -181,6 +198,7 @@ def train():
         ), batch_size=BATCH_SIZE
     )
 
+    # 2. 모델 학습
     model     = GestureCNNLSTM().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     criterion = nn.CrossEntropyLoss()
@@ -238,10 +256,11 @@ def train():
 
         scheduler.step()
 
-    print(f"\n✅ 학습 완료! [CNN-LSTM_Gau]")
+    print(f"\n✅ 학습 완료! [CNN-LSTM]")
     print(f"   Best val accuracy : {best_val_acc:.1%}")
     print(f"   모델 저장 위치    : {MODEL_PATH}")
 
+    # 3. 평가
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
 
@@ -257,8 +276,9 @@ def train():
         target_names=train_dataset.le.classes_
     ))
 
+    # 4. 그래프 (2x2)
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle(f'CNN-LSTM_Gaussian Results (Best Val Acc: {best_val_acc:.1%})', fontsize=14)
+    fig.suptitle(f'CNN-LSTM Results (Best Val Acc: {best_val_acc:.1%})', fontsize=14)
     epochs_range = range(1, len(history_loss) + 1)
 
     axes[0, 0].plot(epochs_range, history_loss, 'b-o', markersize=3, label='Train Loss')
@@ -306,7 +326,7 @@ def train():
     axes[1, 1].grid(True)
 
     plt.tight_layout()
-    save_path = os.path.join(MODEL_DIR, "cnn_lstm__gau_results.png")
+    save_path = os.path.join(MODEL_DIR, "cnn_lstm_results.png")
     plt.savefig(save_path, dpi=150)
     print(f"그래프 저장 → {save_path}")
 
