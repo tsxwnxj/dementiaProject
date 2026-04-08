@@ -6,21 +6,12 @@ import argparse
 
 # ── 설정 ──────────────────────────────────────────────────
 ALL_GESTURES = {
-<<<<<<< HEAD
-    "1": "finger_wave",     # 1. 손가락 움직이기
-    "2": "hand_shake",      # 2. 손털기
-    "3": "finger_fold",     # 3. 손가락 접기
-    "4": "fist_open",       # 4. 주먹 쥐고 펴기 
-    "5": "cross_fist",      # 5. 엇갈려 주먹 쥐고 펴기
-    "6": "fingertip_clap",  # 6. 손끝 박수
-=======
     "1": "finger_wave",
     "2": "hand_shake",
     "3": "finger_fold",
     "4": "fist_open",
     "5": "cross_fist",
     "6": "fingertip_clap",
->>>>>>> a579d7d05bc2a1331ecb9486e6734c9a25360456
 }
 SEQUENCE_LEN  = 30
 NUM_SEQUENCES = 50
