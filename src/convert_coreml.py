@@ -13,7 +13,7 @@ HIDDEN_SIZE  = 64
 NUM_LAYERS   = 2
 NUM_CLASSES  = 6
 
-MODEL_DIR   = "/Users/jangjunseo/Desktop/dementiaProject/model"
+MODEL_DIR   = "/Users/junseo_mac_mini/Desktop/dementiaProject/model"
 MODEL_PATH  = os.path.join(MODEL_DIR, "gesture_final.pt")
 ONNX_PATH   = os.path.join(MODEL_DIR, "gesture_final.onnx")
 COREML_PATH = os.path.join(MODEL_DIR, "gesture_final.mlpackage")

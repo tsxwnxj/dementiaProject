@@ -37,10 +37,10 @@ EPOCHS       = 50
 LR           = 1e-3
 EARLY_STOP   = 15
 
-DATA_RANGE = (0, 799)  # 전체 데이터
+DATA_RANGE = (0, 1099)  # 전체 데이터
 
-DATA_PATH  = "/Users/jangjunseo/Desktop/dementiaProject/data/sequences"
-MODEL_DIR  = "/Users/jangjunseo/Desktop/dementiaProject/model"
+DATA_PATH  = "/Users/junseo_mac_mini/Desktop/dementiaProject/data/sequences"
+MODEL_DIR  = "/Users/junseo_mac_mini/Desktop/dementiaProject/model"
 MODEL_PATH = os.path.join(MODEL_DIR, "gesture_final.pt")
 LABEL_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 
